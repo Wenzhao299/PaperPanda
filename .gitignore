@@ -52,6 +52,7 @@ logs/
 data/
 *.pdf
 !arxiv_insight.pdf
+plans/
 
 # Celery
 celerybeat-schedule
@@ -70,3 +71,4 @@ models_cache/
 # Resources
 ScreenShot.png
 arxiv_insight.pdf
+plans/
