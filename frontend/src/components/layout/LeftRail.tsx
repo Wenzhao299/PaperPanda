@@ -11,14 +11,14 @@ import type { UserProfile } from "@/types/user";
 interface NavItem {
   href: string;
   label: string;
-  icon: "search" | "history" | "favorites" | "chat";
+  icon: "search" | "history" | "favorites" | "knowledge";
 }
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/search", label: "搜索", icon: "search" },
   { href: "/history", label: "历史", icon: "history" },
   { href: "/favorites", label: "收藏", icon: "favorites" },
-  { href: "/chat", label: "对话", icon: "chat" },
+  { href: "/chat", label: "知识库", icon: "knowledge" },
 ];
 
 function RailIcon({ name }: { name: NavItem["icon"] }) {

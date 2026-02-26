@@ -11,7 +11,7 @@ from app.config import get_settings
 
 
 class ArxivCrawler:
-    BASE_URL = "http://export.arxiv.org/api/query"
+    BASE_URL = "https://export.arxiv.org/api/query"
 
     async def fetch_metadata(self, categories: list[str] | None = None, max_results: int | None = None) -> list[dict[str, Any]]:
         settings = get_settings()
@@ -19,7 +19,7 @@ class ArxivCrawler:
         limit = max_results or settings.arxiv_batch_size
 
         all_records: list[dict[str, Any]] = []
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             for category in categories:
                 params = {
                     "search_query": f"cat:{category}",

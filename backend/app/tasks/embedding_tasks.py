@@ -13,6 +13,7 @@ async def _run_generate_embeddings(limit: int = 200) -> int:
         session_factory = get_session_factory()
         async with session_factory() as db:
             pipeline = CrawlerPipeline(db)
+            await pipeline.acquire_pipeline_lock()
             count = await pipeline.generate_abstract_embeddings(limit=limit)
             await db.commit()
             return count

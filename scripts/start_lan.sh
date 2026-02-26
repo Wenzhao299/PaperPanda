@@ -39,7 +39,7 @@ ensure_root_env() {
 check_backend_python_deps() {
   "$PY" - <<'PY'
 import importlib
-mods = ["fastapi", "uvicorn", "sqlalchemy", "redis"]
+mods = ["fastapi", "uvicorn", "sqlalchemy", "redis", "pypdf", "multipart", "feedparser", "httpx"]
 missing = []
 for m in mods:
     try:
@@ -271,23 +271,26 @@ main() {
   local cors_origins
   cors_origins="$(build_cors_origins "$lan_ip" "$tailscale_ip")"
 
-  echo "[1/6] Verifying backend Python dependencies"
+  echo "[1/7] Verifying backend Python dependencies"
   check_backend_python_deps
 
-  echo "[2/6] Starting infra containers (postgres, redis)"
+  echo "[2/7] Starting infra containers (postgres, redis, milvus)"
   cd "$ROOT_DIR"
-  docker compose up -d postgres redis >/dev/null
+  docker compose up -d postgres redis etcd minio milvus >/dev/null
 
-  echo "[3/6] Running database migration"
+  echo "[3/7] Running database migration"
   "$PY" "$ROOT_DIR/scripts/init_db.py"
 
-  echo "[4/6] Writing frontend API env (.env.local)"
+  echo "[4/7] Initializing Milvus collections"
+  "$PY" "$ROOT_DIR/scripts/init_milvus.py"
+
+  echo "[5/7] Writing frontend API env (.env.local)"
   write_frontend_env
 
-  echo "[5/6] Starting backend"
+  echo "[6/7] Starting backend"
   start_backend "$cors_origins"
 
-  echo "[6/6] Starting frontend"
+  echo "[7/7] Starting frontend"
   ensure_frontend_deps
   start_frontend
 

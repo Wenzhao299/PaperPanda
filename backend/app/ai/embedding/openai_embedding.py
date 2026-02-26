@@ -24,4 +24,11 @@ class OpenAIEmbeddingProvider:
         client = AsyncOpenAI(api_key=self.api_key, base_url=self.api_base)
         response = await client.embeddings.create(model=self.model, input=texts)
         vectors = [item.embedding for item in response.data]
-        return [list(vector) for vector in vectors]
+        return [self._align_dimension(list(vector)) for vector in vectors]
+
+    def _align_dimension(self, vector: list[float]) -> list[float]:
+        if len(vector) == self.dimension:
+            return vector
+        if len(vector) > self.dimension:
+            return vector[: self.dimension]
+        return vector + [0.0] * (self.dimension - len(vector))

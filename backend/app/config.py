@@ -127,6 +127,14 @@ class Settings(BaseSettings):
     embedding_device: str = "cuda:0"
     openai_embedding_model: str = "text-embedding-3-small"
     gemini_embedding_model: str = "text-embedding-004"
+    embedding_local_model_path: str = ""
+
+    # ---- 知识库 PDF 管道（Phase 2）----
+    upload_storage_dir: str = "data/uploads"
+    upload_max_file_size_mb: int = 30
+    knowledge_chunk_size: int = 512
+    knowledge_chunk_overlap: int = 64
+    knowledge_chat_context_chars: int = 1200
 
     # ---- arXiv 爬虫配置 ----
     arxiv_categories: str = "cs.AI,cs.CL,cs.CV,cs.LG,cs.IR"

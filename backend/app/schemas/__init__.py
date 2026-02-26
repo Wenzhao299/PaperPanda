@@ -27,6 +27,15 @@ from app.schemas.favorite import (
 from app.schemas.paper import PaperDetailResponse, PaperFulltextResponse
 from app.schemas.search import SearchHistoryItem, SearchRequest, SearchResponse, SearchResultItem
 from app.schemas.user import UserProfile, UserProfileUpdate, UserSettingsUpdate
+from app.schemas.knowledge_base import (
+    KnowledgeBaseChatRequest,
+    KnowledgeBaseChatResponse,
+    KnowledgeBaseCreateRequest,
+    KnowledgeBaseOut,
+    KnowledgeChatTurn,
+    KnowledgeContextChunk,
+    KnowledgeDocumentOut,
+)
 
 __all__ = [
     "AuthResponse",
@@ -58,4 +67,11 @@ __all__ = [
     "UserProfile",
     "UserProfileUpdate",
     "UserSettingsUpdate",
+    "KnowledgeBaseCreateRequest",
+    "KnowledgeBaseOut",
+    "KnowledgeDocumentOut",
+    "KnowledgeChatTurn",
+    "KnowledgeBaseChatRequest",
+    "KnowledgeContextChunk",
+    "KnowledgeBaseChatResponse",
 ]

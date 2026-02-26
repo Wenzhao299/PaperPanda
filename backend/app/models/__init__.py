@@ -7,6 +7,7 @@ from app.models.paper import Paper, PaperChunk
 from app.models.favorite import Favorite, FavoriteItem
 from app.models.chat import ChatSession, ChatMessage
 from app.models.search_history import SearchHistory
+from app.models.knowledge_base import KnowledgeBase, KnowledgeChunk, KnowledgeDocument
 
 __all__ = [
     "User",
@@ -18,4 +19,7 @@ __all__ = [
     "ChatSession",
     "ChatMessage",
     "SearchHistory",
+    "KnowledgeBase",
+    "KnowledgeDocument",
+    "KnowledgeChunk",
 ]
