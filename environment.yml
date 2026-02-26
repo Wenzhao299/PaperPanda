@@ -1,0 +1,11 @@
+name: env_paper
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pytorch=2.5
+  - torchvision
+  - torchaudio
+  - pip:
+      - -r backend/requirements.txt

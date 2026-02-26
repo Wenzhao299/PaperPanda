@@ -1,0 +1,61 @@
+from app.schemas.auth import (
+    AuthResponse,
+    LoginRequest,
+    MessageResponse,
+    RefreshTokenRequest,
+    RegisterRequest,
+    SendCodeRequest,
+    TokenPair,
+)
+from app.schemas.chat import (
+    ChatMessageCreateRequest,
+    ChatMessageOut,
+    ChatSendResponse,
+    ChatSessionCreateRequest,
+    ChatSessionOut,
+)
+from app.schemas.favorite import (
+    FavoriteAddPaperRequest,
+    FavoriteCreateRequest,
+    FavoriteDetailOut,
+    FavoriteExportQuery,
+    FavoriteItemOut,
+    FavoriteOut,
+    FavoriteSortRequest,
+    FavoriteUpdateRequest,
+)
+from app.schemas.paper import PaperDetailResponse, PaperFulltextResponse
+from app.schemas.search import SearchHistoryItem, SearchRequest, SearchResponse, SearchResultItem
+from app.schemas.user import UserProfile, UserProfileUpdate, UserSettingsUpdate
+
+__all__ = [
+    "AuthResponse",
+    "LoginRequest",
+    "MessageResponse",
+    "RefreshTokenRequest",
+    "RegisterRequest",
+    "SendCodeRequest",
+    "TokenPair",
+    "ChatMessageCreateRequest",
+    "ChatMessageOut",
+    "ChatSendResponse",
+    "ChatSessionCreateRequest",
+    "ChatSessionOut",
+    "FavoriteAddPaperRequest",
+    "FavoriteCreateRequest",
+    "FavoriteDetailOut",
+    "FavoriteExportQuery",
+    "FavoriteItemOut",
+    "FavoriteOut",
+    "FavoriteSortRequest",
+    "FavoriteUpdateRequest",
+    "PaperDetailResponse",
+    "PaperFulltextResponse",
+    "SearchHistoryItem",
+    "SearchRequest",
+    "SearchResponse",
+    "SearchResultItem",
+    "UserProfile",
+    "UserProfileUpdate",
+    "UserSettingsUpdate",
+]

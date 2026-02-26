@@ -1,0 +1,79 @@
+[project]
+name = "paperpanda-backend"
+version = "0.1.0"
+description = "PaperPanda - 论文语义检索系统后端"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+
+dependencies = [
+    # Web Framework
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+    # Database
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    # Redis
+    "redis[hiredis]>=5.2.0",
+    # Milvus
+    "pymilvus>=2.4.9",
+    # Meilisearch
+    "meilisearch-python-sdk>=3.3.0",
+    # Auth & Security
+    "pyjwt>=2.10.0",
+    "passlib[bcrypt]>=1.7.4",
+    "bcrypt>=4.0.1,<4.1.0",
+    "python-jose[cryptography]>=3.3.0",
+    # Email
+    "aiosmtplib>=3.0.2",
+    "jinja2>=3.1.4",
+    # LLM Providers
+    "openai>=1.57.0",
+    "google-genai>=1.0.0",
+    "anthropic>=0.39.0",
+    # Embedding (local)
+    "sentence-transformers>=3.3.0",
+    "torch>=2.5.0",
+    # Data Processing
+    "httpx>=0.28.0",
+    "lxml>=5.3.0",
+    "feedparser>=6.0.11",
+    # Task Queue
+    "celery[redis]>=5.4.0",
+    # Config & Utils
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "python-dotenv>=1.0.1",
+    # Logging
+    "structlog>=24.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "httpx>=0.28.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "pre-commit>=4.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=75.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true

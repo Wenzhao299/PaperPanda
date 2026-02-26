@@ -1,0 +1,72 @@
+# PaperPanda
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Next.js
+.next/
+out/
+
+# Python
+*.pyc
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+
+# Logs
+*.log
+logs/
+.run/
+
+# Data & Storage
+data/
+*.pdf
+!arxiv_insight.pdf
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Docker volumes (local)
+postgres_data/
+redis_data/
+milvus_data/
+meilisearch_data/
+
+# Model cache
+models_cache/
+.cache/
+
+# Resources
+ScreenShot.png
+arxiv_insight.pdf
