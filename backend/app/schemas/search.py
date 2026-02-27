@@ -57,3 +57,19 @@ class SearchHistoryItem(BaseModel):
     filters: dict
     result_count: int
     created_at: datetime
+
+
+class PaperViewHistoryCreateRequest(BaseModel):
+    paper_id: str
+
+
+class PaperViewHistoryItem(BaseModel):
+    id: str
+    paper_id: str
+    arxiv_id: str
+    title: str
+    title_zh: str
+    source: str
+    published_date: date | None = None
+    view_count: int
+    viewed_at: datetime

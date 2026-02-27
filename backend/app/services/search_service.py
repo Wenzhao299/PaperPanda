@@ -7,18 +7,26 @@ import time
 import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from fastapi import status
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.embedding import build_embedding_provider
 from app.config import get_settings
+from app.core.exceptions import AppError
 from app.db.milvus import ensure_milvus_collections, get_milvus
 from app.models.paper import Paper
-from app.models.search_history import SearchHistory
-from app.schemas.search import SearchHistoryItem, SearchRequest, SearchResponse, SearchResultItem
+from app.models.search_history import PaperViewHistory, SearchHistory
+from app.schemas.search import (
+    PaperViewHistoryItem,
+    SearchHistoryItem,
+    SearchRequest,
+    SearchResponse,
+    SearchResultItem,
+)
 
 
 @dataclass(slots=True)
@@ -224,6 +232,76 @@ class SearchService:
             for item in rows
         ]
 
+    async def list_paper_views(self, user_id: str, page: int, page_size: int) -> list[PaperViewHistoryItem]:
+        uid = uuid.UUID(user_id)
+        offset = (page - 1) * page_size
+        rows = await self.db.execute(
+            select(PaperViewHistory, Paper)
+            .join(Paper, Paper.id == PaperViewHistory.paper_id)
+            .where(PaperViewHistory.user_id == uid)
+            .order_by(PaperViewHistory.viewed_at.desc())
+            .offset(offset)
+            .limit(page_size)
+        )
+        return [
+            PaperViewHistoryItem(
+                id=str(view.id),
+                paper_id=str(view.paper_id),
+                arxiv_id=paper.arxiv_id,
+                title=paper.title,
+                title_zh=paper.title_zh,
+                source=paper.source,
+                published_date=paper.published_date,
+                view_count=view.view_count,
+                viewed_at=view.viewed_at,
+            )
+            for view, paper in rows.all()
+        ]
+
+    async def save_paper_view(self, user_id: str, paper_id: str) -> PaperViewHistoryItem:
+        try:
+            uid = uuid.UUID(user_id)
+        except ValueError as exc:
+            raise AppError("Invalid user id.", status_code=status.HTTP_400_BAD_REQUEST, code="invalid_user_id") from exc
+
+        try:
+            pid = uuid.UUID(paper_id)
+        except ValueError as exc:
+            raise AppError("Invalid paper id.", status_code=status.HTTP_400_BAD_REQUEST, code="invalid_paper_id") from exc
+
+        paper = await self.db.scalar(select(Paper).where(Paper.id == pid))
+        if not paper:
+            raise AppError("Paper not found.", status_code=status.HTTP_404_NOT_FOUND, code="paper_not_found")
+
+        item = await self.db.scalar(
+            select(PaperViewHistory).where(PaperViewHistory.user_id == uid, PaperViewHistory.paper_id == pid)
+        )
+        now = datetime.now(timezone.utc)
+        if item is None:
+            item = PaperViewHistory(
+                user_id=uid,
+                paper_id=pid,
+                view_count=1,
+                viewed_at=now,
+            )
+            self.db.add(item)
+        else:
+            item.view_count = int(item.view_count) + 1
+            item.viewed_at = now
+        await self.db.flush()
+
+        return PaperViewHistoryItem(
+            id=str(item.id),
+            paper_id=str(item.paper_id),
+            arxiv_id=paper.arxiv_id,
+            title=paper.title,
+            title_zh=paper.title_zh,
+            source=paper.source,
+            published_date=paper.published_date,
+            view_count=item.view_count,
+            viewed_at=item.viewed_at,
+        )
+
     async def _save_history(self, user_id: str, payload: SearchRequest, result_count: int) -> None:
         history = SearchHistory(
             user_id=uuid.UUID(user_id),
@@ -243,8 +321,12 @@ class SearchService:
 
     def _apply_paper_filters(self, stmt: Any, payload: SearchRequest) -> Any:
         stmt = stmt.where(Paper.status == "active")
-        if payload.source != "all":
-            stmt = stmt.where(Paper.source == payload.source)
+        if payload.source == "arxiv":
+            stmt = stmt.where(Paper.source == "arxiv")
+        elif payload.source == "conference":
+            stmt = stmt.where(or_(Paper.source == "conference", Paper.source.like("conference.%")))
+        elif payload.source == "journal":
+            stmt = stmt.where(or_(Paper.source == "journal", Paper.source.like("journal.%")))
         if payload.categories:
             stmt = stmt.where(Paper.primary_category.in_(payload.categories))
         if payload.published_year:

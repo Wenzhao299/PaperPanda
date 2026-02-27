@@ -69,6 +69,5 @@ models_cache/
 .cache/
 
 # Resources
-ScreenShot.png
-arxiv_insight.pdf
+resources/
 plans/

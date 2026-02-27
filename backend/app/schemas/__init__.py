@@ -25,16 +25,26 @@ from app.schemas.favorite import (
     FavoriteUpdateRequest,
 )
 from app.schemas.paper import PaperDetailResponse, PaperFulltextResponse
-from app.schemas.search import SearchHistoryItem, SearchRequest, SearchResponse, SearchResultItem
+from app.schemas.search import (
+    PaperViewHistoryCreateRequest,
+    PaperViewHistoryItem,
+    SearchHistoryItem,
+    SearchRequest,
+    SearchResponse,
+    SearchResultItem,
+)
 from app.schemas.user import UserProfile, UserProfileUpdate, UserSettingsUpdate
 from app.schemas.knowledge_base import (
+    KnowledgeBaseAddPaperRequest,
     KnowledgeBaseChatRequest,
     KnowledgeBaseChatResponse,
     KnowledgeBaseCreateRequest,
     KnowledgeBaseOut,
+    KnowledgeBaseUpdateRequest,
     KnowledgeChatTurn,
     KnowledgeContextChunk,
     KnowledgeDocumentOut,
+    KnowledgeDocumentUpdateRequest,
 )
 
 __all__ = [
@@ -61,6 +71,8 @@ __all__ = [
     "PaperDetailResponse",
     "PaperFulltextResponse",
     "SearchHistoryItem",
+    "PaperViewHistoryCreateRequest",
+    "PaperViewHistoryItem",
     "SearchRequest",
     "SearchResponse",
     "SearchResultItem",
@@ -68,8 +80,11 @@ __all__ = [
     "UserProfileUpdate",
     "UserSettingsUpdate",
     "KnowledgeBaseCreateRequest",
+    "KnowledgeBaseUpdateRequest",
+    "KnowledgeBaseAddPaperRequest",
     "KnowledgeBaseOut",
     "KnowledgeDocumentOut",
+    "KnowledgeDocumentUpdateRequest",
     "KnowledgeChatTurn",
     "KnowledgeBaseChatRequest",
     "KnowledgeContextChunk",

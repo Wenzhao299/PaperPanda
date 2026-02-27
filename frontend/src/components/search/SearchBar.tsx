@@ -19,13 +19,12 @@ interface SearchBarProps {
 interface SourceOption {
   value: SearchSource;
   label: string;
-  disabled?: boolean;
 }
 
 const SOURCE_OPTIONS: SourceOption[] = [
   { value: "arxiv", label: "arxiv" },
-  { value: "conference", label: "会议（占位）", disabled: true },
-  { value: "journal", label: "期刊（占位）", disabled: true },
+  { value: "conference", label: "会议" },
+  { value: "journal", label: "期刊" },
   { value: "all", label: "全部来源" },
 ];
 
@@ -114,8 +113,7 @@ export function SearchBar({
                   <button
                     className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs ${
                       source === option.value ? "bg-slate-100 text-slate-700" : "text-slate-500 hover:bg-slate-50"
-                    } ${option.disabled ? "cursor-not-allowed opacity-50" : ""}`}
-                    disabled={option.disabled}
+                    }`}
                     key={option.value}
                     onClick={() => {
                       onSourceChange(option.value);
@@ -124,7 +122,6 @@ export function SearchBar({
                     type="button"
                   >
                     <span>{option.label}</span>
-                    {option.disabled ? <span>占位</span> : null}
                   </button>
                 ))}
               </div>

@@ -10,6 +10,20 @@ class KnowledgeBaseCreateRequest(BaseModel):
     description: str = Field(default="", max_length=2000)
 
 
+class KnowledgeBaseUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=2000)
+
+
+class KnowledgeBaseAddPaperRequest(BaseModel):
+    paper_id: str
+
+
+class KnowledgeDocumentUpdateRequest(BaseModel):
+    file_name: str | None = Field(default=None, min_length=1, max_length=255)
+    target_knowledge_base_id: str | None = None
+
+
 class KnowledgeBaseOut(BaseModel):
     id: str
     name: str

@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import UploadFile, status
-from sqlalchemy import delete, func, or_, select
+import httpx
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.embedding import build_embedding_provider
@@ -16,13 +17,17 @@ from app.config import get_settings
 from app.core.exceptions import AppError
 from app.db.milvus import ensure_milvus_collections, get_milvus
 from app.models.knowledge_base import KnowledgeBase, KnowledgeChunk, KnowledgeDocument
+from app.models.paper import Paper
 from app.schemas.knowledge_base import (
+    KnowledgeBaseAddPaperRequest,
     KnowledgeBaseChatRequest,
     KnowledgeBaseChatResponse,
     KnowledgeBaseCreateRequest,
     KnowledgeBaseOut,
+    KnowledgeBaseUpdateRequest,
     KnowledgeContextChunk,
     KnowledgeDocumentOut,
+    KnowledgeDocumentUpdateRequest,
 )
 
 
@@ -34,6 +39,11 @@ class _ChunkHit:
 
 
 class KnowledgeBaseService:
+    PAPER_DOWNLOAD_HEADERS = {
+        "User-Agent": "PaperPandaBot/1.0 (+https://github.com/)",
+        "Accept": "application/pdf,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self.settings = get_settings()
@@ -100,6 +110,64 @@ class KnowledgeBaseService:
             updated_at=kb.updated_at,
         )
 
+    async def update_base(
+        self,
+        user_id: str,
+        knowledge_base_id: str,
+        payload: KnowledgeBaseUpdateRequest,
+    ) -> KnowledgeBaseOut:
+        kb = await self._get_owned_base(user_id=user_id, knowledge_base_id=knowledge_base_id)
+        changed = False
+
+        name = (payload.name or "").strip()
+        if name and name != kb.name:
+            existing = await self.db.scalar(
+                select(KnowledgeBase).where(
+                    KnowledgeBase.user_id == kb.user_id,
+                    KnowledgeBase.name == name,
+                    KnowledgeBase.id != kb.id,
+                )
+            )
+            if existing:
+                raise AppError(
+                    "Knowledge base name already exists.",
+                    status_code=status.HTTP_409_CONFLICT,
+                    code="kb_name_exists",
+                )
+            kb.name = name
+            changed = True
+
+        if payload.description is not None:
+            description = payload.description.strip()
+            if description != (kb.description or ""):
+                kb.description = description
+                changed = True
+
+        if not changed:
+            raise AppError(
+                "No valid knowledge base update fields provided.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                code="invalid_kb_update",
+            )
+
+        await self.db.flush()
+        await self.db.refresh(kb)
+
+        doc_count = await self.db.scalar(
+            select(func.count(KnowledgeDocument.id)).where(
+                KnowledgeDocument.knowledge_base_id == kb.id,
+                KnowledgeDocument.user_id == kb.user_id,
+            )
+        )
+        return KnowledgeBaseOut(
+            id=str(kb.id),
+            name=kb.name,
+            description=kb.description or "",
+            document_count=int(doc_count or 0),
+            created_at=kb.created_at,
+            updated_at=kb.updated_at,
+        )
+
     async def delete_base(self, user_id: str, knowledge_base_id: str) -> None:
         kb = await self._get_owned_base(user_id=user_id, knowledge_base_id=knowledge_base_id)
         documents = list(
@@ -139,6 +207,113 @@ class KnowledgeBaseService:
             raise AppError("Only PDF files are supported.", code="invalid_file_type")
 
         raw = await file.read()
+        return await self._ingest_pdf_document(
+            kb=kb,
+            file_name=file.filename,
+            raw=raw,
+        )
+
+    async def add_paper_document(
+        self,
+        user_id: str,
+        knowledge_base_id: str,
+        payload: KnowledgeBaseAddPaperRequest,
+    ) -> KnowledgeDocumentOut:
+        kb = await self._get_owned_base(user_id=user_id, knowledge_base_id=knowledge_base_id)
+        paper_id = self._parse_uuid(payload.paper_id, "paper")
+        paper = await self.db.scalar(select(Paper).where(Paper.id == paper_id, Paper.status == "active"))
+        if not paper:
+            raise AppError("Paper not found.", status_code=status.HTTP_404_NOT_FOUND, code="paper_not_found")
+
+        pdf_url = str(paper.pdf_url or "").strip()
+        if not pdf_url:
+            raise AppError(
+                "Paper does not provide a downloadable PDF URL.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                code="paper_pdf_missing",
+            )
+
+        try:
+            async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+                response = await client.get(pdf_url, headers=self.PAPER_DOWNLOAD_HEADERS)
+                response.raise_for_status()
+        except Exception as exc:
+            raise AppError(
+                f"Failed to download paper PDF: {exc}",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                code="paper_pdf_download_failed",
+            ) from exc
+
+        raw = bytes(response.content or b"")
+        title_seed = str(paper.title or "").strip()
+        arxiv_seed = str(paper.arxiv_id or "").strip()
+        filename_seed = title_seed or arxiv_seed or str(paper.id)
+        file_name = self._sanitize_filename(f"{filename_seed}.pdf")
+        return await self._ingest_pdf_document(
+            kb=kb,
+            file_name=file_name,
+            raw=raw,
+        )
+
+    async def update_document(
+        self,
+        user_id: str,
+        knowledge_base_id: str,
+        document_id: str,
+        payload: KnowledgeDocumentUpdateRequest,
+    ) -> KnowledgeDocumentOut:
+        kb = await self._get_owned_base(user_id=user_id, knowledge_base_id=knowledge_base_id)
+        did = self._parse_uuid(document_id, "document")
+        doc = await self.db.scalar(
+            select(KnowledgeDocument).where(KnowledgeDocument.id == did, KnowledgeDocument.knowledge_base_id == kb.id)
+        )
+        if not doc:
+            raise AppError("Document not found.", status_code=status.HTTP_404_NOT_FOUND, code="document_not_found")
+
+        changed = False
+
+        new_file_name_raw = (payload.file_name or "").strip()
+        if new_file_name_raw:
+            safe_name = self._sanitize_filename(new_file_name_raw)
+            if safe_name != doc.file_name:
+                current_path = Path(doc.file_path)
+                moved_path = self._safe_rename_file(current_path, safe_name)
+                doc.file_name = safe_name
+                doc.file_path = str(moved_path)
+                changed = True
+
+        target_kb_id_raw = (payload.target_knowledge_base_id or "").strip()
+        if target_kb_id_raw:
+            target_kb = await self._get_owned_base(user_id=user_id, knowledge_base_id=target_kb_id_raw)
+            if target_kb.id != kb.id:
+                doc.knowledge_base_id = target_kb.id
+                await self.db.execute(
+                    update(KnowledgeChunk)
+                    .where(KnowledgeChunk.document_id == doc.id)
+                    .values(knowledge_base_id=target_kb.id)
+                )
+                current_path = Path(doc.file_path)
+                moved_path = self._move_file_to_kb_dir(current_path=current_path, kb=target_kb)
+                doc.file_path = str(moved_path)
+                changed = True
+
+        if not changed:
+            raise AppError(
+                "No valid document update fields provided.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                code="invalid_document_update",
+            )
+
+        await self.db.flush()
+        await self.db.refresh(doc)
+        return self._doc_to_schema(doc)
+
+    async def _ingest_pdf_document(
+        self,
+        kb: KnowledgeBase,
+        file_name: str,
+        raw: bytes,
+    ) -> KnowledgeDocumentOut:
         if not raw:
             raise AppError("Uploaded file is empty.", code="empty_file")
         if len(raw) > self.settings.upload_max_file_size_mb * 1024 * 1024:
@@ -149,14 +324,14 @@ class KnowledgeBaseService:
 
         target_dir = self.upload_root / str(kb.user_id) / str(kb.id)
         target_dir.mkdir(parents=True, exist_ok=True)
-        safe_name = self._sanitize_filename(file.filename)
+        safe_name = self._sanitize_filename(file_name)
         saved_file = target_dir / f"{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}_{safe_name}"
         saved_file.write_bytes(raw)
 
         doc = KnowledgeDocument(
             knowledge_base_id=kb.id,
             user_id=kb.user_id,
-            file_name=file.filename,
+            file_name=safe_name,
             file_path=str(saved_file),
             file_size=len(raw),
             parse_status="processing",
@@ -490,6 +665,34 @@ class KnowledgeBaseService:
                 path.unlink()
         except OSError:
             pass
+
+    def _safe_rename_file(self, current_path: Path, target_name: str) -> Path:
+        if not current_path.exists() or not current_path.is_file():
+            return current_path
+        candidate = current_path.with_name(target_name)
+        if candidate == current_path:
+            return current_path
+        if candidate.exists():
+            candidate = current_path.with_name(f"{candidate.stem}_{uuid.uuid4().hex[:6]}{candidate.suffix}")
+        try:
+            current_path.rename(candidate)
+            return candidate
+        except OSError:
+            return current_path
+
+    def _move_file_to_kb_dir(self, current_path: Path, kb: KnowledgeBase) -> Path:
+        if not current_path.exists() or not current_path.is_file():
+            return current_path
+        target_dir = self.upload_root / str(kb.user_id) / str(kb.id)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        candidate = target_dir / current_path.name
+        if candidate.exists():
+            candidate = target_dir / f"{current_path.stem}_{uuid.uuid4().hex[:6]}{current_path.suffix}"
+        try:
+            current_path.rename(candidate)
+            return candidate
+        except OSError:
+            return current_path
 
     @staticmethod
     def _parse_uuid(value: str, field: str) -> uuid.UUID:

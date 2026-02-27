@@ -11,6 +11,8 @@ import {
   deleteKnowledgeDocument,
   listKnowledgeBases,
   listKnowledgeDocuments,
+  updateKnowledgeBase,
+  updateKnowledgeDocument,
   uploadKnowledgeDocument,
 } from "@/lib/knowledge-base-api";
 import type { KnowledgeBaseItem, KnowledgeChatTurn, KnowledgeDocumentItem } from "@/types/knowledge-base";
@@ -37,6 +39,11 @@ export default function ChatPage() {
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [busyBaseId, setBusyBaseId] = useState<string | null>(null);
+  const [openBaseMenuId, setOpenBaseMenuId] = useState<string | null>(null);
+  const [busyDocId, setBusyDocId] = useState<string | null>(null);
+  const [moveTargets, setMoveTargets] = useState<Record<string, string>>({});
+  const [openDocMenu, setOpenDocMenu] = useState<{ docId: string; panel: "root" | "move" } | null>(null);
 
   const selectedBase = useMemo(
     () => bases.find((item) => item.id === selectedBaseId) || null,
@@ -83,9 +90,7 @@ export default function ChatPage() {
   };
 
   useEffect(() => {
-    if (!hydrated || !isAuthenticated) {
-      return;
-    }
+    if (!hydrated || !isAuthenticated) return;
     void refreshBases();
   }, [hydrated, isAuthenticated]);
 
@@ -93,11 +98,53 @@ export default function ChatPage() {
     if (!selectedBaseId) {
       setDocs([]);
       setMessages([]);
+      setOpenBaseMenuId(null);
+      setOpenDocMenu(null);
       return;
     }
     setMessages([]);
+    setOpenBaseMenuId(null);
+    setOpenDocMenu(null);
     void refreshDocuments(selectedBaseId);
   }, [selectedBaseId]);
+
+  useEffect(() => {
+    if (!openBaseMenuId) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-base-menu-root="true"]')) {
+        return;
+      }
+      setOpenBaseMenuId(null);
+    };
+    window.addEventListener("mousedown", onPointerDown);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+    };
+  }, [openBaseMenuId]);
+
+  useEffect(() => {
+    if (!openDocMenu) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-doc-menu-root="true"]')) {
+        return;
+      }
+      setOpenDocMenu(null);
+    };
+    window.addEventListener("mousedown", onPointerDown);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+    };
+  }, [openDocMenu]);
+
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    for (const doc of docs) {
+      next[doc.id] = doc.knowledge_base_id;
+    }
+    setMoveTargets(next);
+  }, [docs]);
 
   const onCreateBase = async () => {
     const name = baseName.trim();
@@ -124,6 +171,7 @@ export default function ChatPage() {
       return;
     }
     setError("");
+    setBusyBaseId(baseId);
     try {
       await deleteKnowledgeBase(baseId);
       const nextBases = bases.filter((item) => item.id !== baseId);
@@ -131,6 +179,24 @@ export default function ChatPage() {
       setSelectedBaseId(nextBases[0]?.id ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "删除知识库失败");
+    } finally {
+      setBusyBaseId(null);
+    }
+  };
+
+  const onRenameBase = async (base: KnowledgeBaseItem) => {
+    const nextNameRaw = window.prompt("请输入新的知识库名称", base.name);
+    const nextName = nextNameRaw?.trim() || "";
+    if (!nextName) return;
+    setError("");
+    setBusyBaseId(base.id);
+    try {
+      await updateKnowledgeBase(base.id, { name: nextName });
+      await refreshBases(base.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "编辑知识库失败");
+    } finally {
+      setBusyBaseId(null);
     }
   };
 
@@ -169,6 +235,42 @@ export default function ChatPage() {
     }
   };
 
+  const onRenameDocument = async (doc: KnowledgeDocumentItem) => {
+    if (!selectedBaseId) return;
+    const nextName = window.prompt("请输入新的文件名", doc.file_name);
+    if (!nextName || !nextName.trim()) return;
+    setError("");
+    setBusyDocId(doc.id);
+    try {
+      await updateKnowledgeDocument(selectedBaseId, doc.id, { file_name: nextName.trim() });
+      await refreshDocuments(selectedBaseId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "重命名文档失败");
+    } finally {
+      setBusyDocId(null);
+    }
+  };
+
+  const onMoveDocument = async (doc: KnowledgeDocumentItem) => {
+    if (!selectedBaseId) return;
+    const targetId = (moveTargets[doc.id] || "").trim();
+    if (!targetId || targetId === selectedBaseId) {
+      setError("请选择目标知识库后再移动");
+      return;
+    }
+    setError("");
+    setBusyDocId(doc.id);
+    try {
+      await updateKnowledgeDocument(selectedBaseId, doc.id, { target_knowledge_base_id: targetId });
+      await refreshDocuments(selectedBaseId);
+      await refreshBases(selectedBaseId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "移动文档失败");
+    } finally {
+      setBusyDocId(null);
+    }
+  };
+
   const onSendChat = async () => {
     if (!selectedBaseId) {
       setError("请先选择知识库");
@@ -200,7 +302,7 @@ export default function ChatPage() {
   };
 
   if (!hydrated) {
-    return <main className="mx-auto min-h-screen max-w-6xl px-6 pt-24 text-slate-600">加载中...</main>;
+    return <main className="mx-auto min-h-screen max-w-7xl px-6 pt-24 text-slate-600">加载中...</main>;
   }
 
   if (!isAuthenticated) {
@@ -218,20 +320,17 @@ export default function ChatPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-6 pb-12 pt-20">
+    <main className="mx-auto min-h-screen max-w-[1400px] px-6 pb-12 pt-20">
       <header className="mb-5">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-700">知识库</h1>
-        <p className="mt-1 text-sm text-slate-500">仅解析你上传的 PDF，并基于解析后的片段进行语义问答。</p>
+        <p className="mt-1 text-sm text-slate-500">仅解析你上传或从搜索结果一键入库的 PDF，并基于解析片段进行问答。</p>
       </header>
 
-      {error ? (
-        <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
-      ) : null}
+      {error ? <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p> : null}
 
-      <section className="grid gap-4 lg:grid-cols-[280px,1fr]">
+      <section className="grid gap-4 xl:grid-cols-[280px,420px,minmax(0,1fr)]">
         <aside className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_6px_16px_rgba(15,23,42,0.06)]">
-          <h2 className="text-sm font-semibold text-slate-700">我的知识库</h2>
-          <div className="mt-3 space-y-2">
+          <div className="space-y-2">
             <input
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
               placeholder="知识库名称"
@@ -245,7 +344,7 @@ export default function ChatPage() {
               onChange={(event) => setBaseDesc(event.target.value)}
             />
             <button
-              className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               disabled={creatingBase}
               onClick={() => void onCreateBase()}
               type="button"
@@ -254,143 +353,252 @@ export default function ChatPage() {
             </button>
           </div>
 
-          <div className="mt-4 max-h-[420px] space-y-2 overflow-y-auto pr-1">
+          <div className="mt-4 max-h-[560px] space-y-2 overflow-y-auto pr-1">
             {loadingBases ? <p className="text-xs text-slate-500">加载中...</p> : null}
             {bases.map((item) => {
               const active = item.id === selectedBaseId;
               return (
-                <button
+                <div
                   className={`w-full rounded-xl border px-3 py-2 text-left ${
                     active
-                      ? "border-slate-900 bg-slate-900 text-white"
+                      ? "border-slate-300 bg-slate-100 text-slate-800"
                       : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
                   }`}
+                  data-base-menu-root="true"
                   key={item.id}
-                  onClick={() => setSelectedBaseId(item.id)}
-                  type="button"
                 >
-                  <div className="text-sm font-medium">{item.name}</div>
-                  <div className={`mt-1 text-xs ${active ? "text-slate-200" : "text-slate-500"}`}>
-                    文档 {item.document_count}
-                  </div>
-                  <div className="mt-2">
-                    <span
-                      className={`text-xs underline ${active ? "text-slate-100" : "text-slate-500"}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void onDeleteBase(item.id);
-                      }}
+                  <div className="flex items-start justify-between gap-2">
+                    <button className="min-w-0 flex-1 text-left" onClick={() => setSelectedBaseId(item.id)} type="button">
+                      <div className="text-sm font-medium">{item.name}</div>
+                      <div className={`mt-1 text-xs ${active ? "text-slate-600" : "text-slate-500"}`}>
+                        文档 {item.document_count}
+                      </div>
+                    </button>
+                    <button
+                      aria-label="知识库操作"
+                      className="rounded-md border border-slate-300 px-2 py-1 text-base leading-none text-slate-600 hover:bg-white disabled:opacity-50"
+                      disabled={busyBaseId === item.id}
+                      onClick={() => setOpenBaseMenuId((prev) => (prev === item.id ? null : item.id))}
+                      type="button"
                     >
-                      删除
-                    </span>
+                      ⋯
+                    </button>
                   </div>
-                </button>
+                  {openBaseMenuId === item.id ? (
+                    <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2 text-xs shadow-[0_10px_24px_rgba(15,23,42,0.10)]">
+                      <button
+                        className="w-full rounded-md px-2 py-1.5 text-left text-slate-700 hover:bg-slate-100"
+                        onClick={() => {
+                          setOpenBaseMenuId(null);
+                          void onRenameBase(item);
+                        }}
+                        type="button"
+                      >
+                        编辑
+                      </button>
+                      <button
+                        className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-red-600 hover:bg-red-50"
+                        onClick={() => {
+                          setOpenBaseMenuId(null);
+                          void onDeleteBase(item.id);
+                        }}
+                        type="button"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               );
             })}
-            {!loadingBases && bases.length === 0 ? (
-              <p className="text-xs text-slate-500">暂无知识库，先创建一个。</p>
-            ) : null}
+            {!loadingBases && bases.length === 0 ? <p className="text-xs text-slate-500">暂无知识库，先创建一个。</p> : null}
           </div>
         </aside>
 
-        <section className="space-y-4">
-          <article className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_6px_16px_rgba(15,23,42,0.06)]">
-            <h2 className="text-lg font-semibold text-slate-700">
-              文档管理{selectedBase ? ` - ${selectedBase.name}` : ""}
-            </h2>
-            <p className="mt-1 text-xs text-slate-500">仅支持 PDF。上传后自动解析、分块并生成向量。</p>
+        <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_6px_16px_rgba(15,23,42,0.06)]">
+          <h2 className="text-lg font-semibold text-slate-700">论文管理{selectedBase ? ` - ${selectedBase.name}` : ""}</h2>
+          <p className="mt-1 text-xs text-slate-500">支持 PDF 上传；也可在搜索卡片中一键添加到知识库。</p>
 
-            <div className="mt-3 flex flex-col gap-2 md:flex-row">
-              <input
-                accept=".pdf,application/pdf"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
-                type="file"
-              />
-              <button
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50"
-                disabled={uploading || !selectedBaseId || !selectedFile}
-                onClick={() => void onUpload()}
-                type="button"
-              >
-                {uploading ? "上传处理中..." : "上传 PDF"}
-              </button>
-            </div>
+          <div className="mt-3 flex flex-col gap-2">
+            <input
+              accept=".pdf,application/pdf"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
+              type="file"
+            />
+            <button
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+              disabled={uploading || !selectedBaseId || !selectedFile}
+              onClick={() => void onUpload()}
+              type="button"
+            >
+              {uploading ? "上传处理中..." : "上传 PDF"}
+            </button>
+          </div>
 
-            <div className="mt-4 space-y-2">
-              {loadingDocs ? <p className="text-xs text-slate-500">加载文档中...</p> : null}
-              {docs.map((doc) => (
-                <div
-                  className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
-                  key={doc.id}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-700">{doc.file_name}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {formatBytes(doc.file_size)} · {doc.page_count} 页 · {doc.chunk_count} chunks
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">状态: {doc.parse_status}</p>
-                      {doc.parse_error ? <p className="mt-1 text-xs text-red-500">{doc.parse_error}</p> : null}
-                    </div>
+          <div className="mt-4 max-h-[590px] space-y-2 overflow-y-auto pr-1">
+            {loadingDocs ? <p className="text-xs text-slate-500">加载文档中...</p> : null}
+            {docs.map((doc) => (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2" key={doc.id}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-700">{doc.file_name}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {formatBytes(doc.file_size)} · {doc.page_count} 页 · {doc.chunk_count} chunks
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">状态: {doc.parse_status}</p>
+                    {doc.parse_error ? <p className="mt-1 text-xs text-red-500">{doc.parse_error}</p> : null}
+                  </div>
+                  <div className="shrink-0" data-doc-menu-root="true">
                     <button
-                      className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-white"
-                      onClick={() => void onDeleteDocument(doc.id)}
+                      aria-label="文档操作"
+                      className="rounded-md border border-slate-300 px-2 py-1 text-base leading-none text-slate-600 hover:bg-white disabled:opacity-50"
+                      disabled={busyDocId === doc.id}
+                      onClick={() =>
+                        setOpenDocMenu((prev) =>
+                          prev?.docId === doc.id ? null : { docId: doc.id, panel: "root" },
+                        )
+                      }
                       type="button"
                     >
-                      删除
+                      ⋯
                     </button>
                   </div>
                 </div>
-              ))}
-              {!loadingDocs && docs.length === 0 ? (
-                <p className="text-xs text-slate-500">当前知识库还没有文档。</p>
-              ) : null}
-            </div>
-          </article>
+                {openDocMenu?.docId === doc.id ? (
+                  <div
+                    className="mt-2 rounded-lg border border-slate-200 bg-white p-2 text-xs shadow-[0_10px_24px_rgba(15,23,42,0.10)]"
+                    data-doc-menu-root="true"
+                  >
+                    {openDocMenu.panel === "root" ? (
+                      <div className="space-y-1">
+                        <button
+                          className="w-full rounded-md px-2 py-1.5 text-left text-slate-700 hover:bg-slate-100"
+                          onClick={() => {
+                            setOpenDocMenu(null);
+                            void onRenameDocument(doc);
+                          }}
+                          type="button"
+                        >
+                          重命名
+                        </button>
+                        <button
+                          className="w-full rounded-md px-2 py-1.5 text-left text-slate-700 hover:bg-slate-100"
+                          onClick={() => setOpenDocMenu({ docId: doc.id, panel: "move" })}
+                          type="button"
+                        >
+                          移动
+                        </button>
+                        <button
+                          className="w-full rounded-md px-2 py-1.5 text-left text-red-600 hover:bg-red-50"
+                          onClick={() => {
+                            setOpenDocMenu(null);
+                            void onDeleteDocument(doc.id);
+                          }}
+                          type="button"
+                        >
+                          删除
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="px-1 text-[11px] text-slate-500">选择目标知识库</p>
+                        <select
+                          className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700"
+                          onChange={(event) =>
+                            setMoveTargets((prev) => ({
+                              ...prev,
+                              [doc.id]: event.target.value,
+                            }))
+                          }
+                          value={moveTargets[doc.id] || selectedBaseId || ""}
+                        >
+                          {bases.map((kb) => (
+                            <option key={kb.id} value={kb.id}>
+                              {kb.name}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            className="rounded-md border border-slate-300 px-2 py-1 text-slate-600 hover:bg-slate-50"
+                            onClick={() => setOpenDocMenu({ docId: doc.id, panel: "root" })}
+                            type="button"
+                          >
+                            返回
+                          </button>
+                          <button
+                            className="rounded-md border border-slate-300 px-2 py-1 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                            disabled={busyDocId === doc.id}
+                            onClick={() => {
+                              void onMoveDocument(doc).finally(() => setOpenDocMenu(null));
+                            }}
+                            type="button"
+                          >
+                            确认移动
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+            {!loadingDocs && docs.length === 0 ? <p className="text-xs text-slate-500">当前知识库还没有文档。</p> : null}
+          </div>
+        </section>
 
-          <article className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_6px_16px_rgba(15,23,42,0.06)]">
-            <h2 className="text-lg font-semibold text-slate-700">知识库对话</h2>
-            <p className="mt-1 text-xs text-slate-500">回答基于所选知识库内的已解析内容。</p>
+        <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-[0_6px_16px_rgba(15,23,42,0.06)]">
+          <h2 className="text-lg font-semibold text-slate-700">知识库对话</h2>
+          <p className="mt-1 text-xs text-slate-500">回答基于当前知识库内已解析内容，超出范围会提示缺失信息。</p>
 
-            <div className="mt-3 h-72 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+          <div className="mt-3 h-[620px] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+            <div className="flex min-h-full flex-col gap-3">
               {messages.length === 0 ? (
-                <p className="text-sm text-slate-500">输入问题后开始对话。</p>
+                <p className="my-auto text-center text-sm text-slate-500">输入问题后开始对话。</p>
               ) : (
                 messages.map((item, index) => (
-                  <div key={`${item.role}-${index}`} className="text-sm">
-                    <span className={`font-medium ${item.role === "user" ? "text-slate-700" : "text-blue-700"}`}>
-                      {item.role === "user" ? "你" : "助手"}：
-                    </span>
-                    <span className="ml-1 whitespace-pre-wrap text-slate-700">{item.content}</span>
+                  <div
+                    className={`flex ${item.role === "user" ? "justify-end" : "justify-start"}`}
+                    key={`${item.role}-${index}`}
+                  >
+                    <div
+                      className={`max-w-[86%] rounded-2xl px-3 py-2 text-sm leading-6 shadow-sm ${
+                        item.role === "user"
+                          ? "bg-slate-900 text-white"
+                          : "border border-slate-200 bg-white text-slate-700"
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap">{item.content}</p>
+                    </div>
                   </div>
                 ))
               )}
             </div>
+          </div>
 
-            <div className="mt-3 flex gap-2">
-              <input
-                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
-                disabled={!selectedBaseId || sending}
-                onChange={(event) => setChatInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    void onSendChat();
-                  }
-                }}
-                placeholder={selectedBaseId ? "输入问题..." : "请先选择知识库"}
-                value={chatInput}
-              />
-              <button
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50"
-                disabled={!selectedBaseId || sending || !chatInput.trim()}
-                onClick={() => void onSendChat()}
-                type="button"
-              >
-                {sending ? "发送中..." : "发送"}
-              </button>
-            </div>
-          </article>
+          <div className="mt-3 flex gap-2">
+            <input
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
+              disabled={!selectedBaseId || sending}
+              onChange={(event) => setChatInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  void onSendChat();
+                }
+              }}
+              placeholder={selectedBaseId ? "输入问题..." : "请先选择知识库"}
+              value={chatInput}
+            />
+            <button
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+              disabled={!selectedBaseId || sending || !chatInput.trim()}
+              onClick={() => void onSendChat()}
+              type="button"
+            >
+              {sending ? "发送中..." : "发送"}
+            </button>
+          </div>
         </section>
       </section>
     </main>

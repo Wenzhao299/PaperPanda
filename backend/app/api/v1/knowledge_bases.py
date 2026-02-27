@@ -6,11 +6,14 @@ from app.api.deps import get_current_user_id
 from app.dependencies import get_knowledge_base_service
 from app.schemas.auth import MessageResponse
 from app.schemas.knowledge_base import (
+    KnowledgeBaseAddPaperRequest,
     KnowledgeBaseChatRequest,
     KnowledgeBaseChatResponse,
     KnowledgeBaseCreateRequest,
     KnowledgeBaseOut,
     KnowledgeDocumentOut,
+    KnowledgeDocumentUpdateRequest,
+    KnowledgeBaseUpdateRequest,
 )
 from app.services.knowledge_base_service import KnowledgeBaseService
 
@@ -32,6 +35,16 @@ async def create_knowledge_base(
     service: KnowledgeBaseService = Depends(get_knowledge_base_service),
 ) -> KnowledgeBaseOut:
     return await service.create_base(user_id=user_id, payload=payload)
+
+
+@router.patch("/{knowledge_base_id}", response_model=KnowledgeBaseOut)
+async def update_knowledge_base(
+    knowledge_base_id: str,
+    payload: KnowledgeBaseUpdateRequest,
+    user_id: str = Depends(get_current_user_id),
+    service: KnowledgeBaseService = Depends(get_knowledge_base_service),
+) -> KnowledgeBaseOut:
+    return await service.update_base(user_id=user_id, knowledge_base_id=knowledge_base_id, payload=payload)
 
 
 @router.delete("/{knowledge_base_id}", response_model=MessageResponse)
@@ -63,6 +76,16 @@ async def upload_knowledge_document(
     return await service.upload_document(user_id=user_id, knowledge_base_id=knowledge_base_id, file=file)
 
 
+@router.post("/{knowledge_base_id}/papers", response_model=KnowledgeDocumentOut)
+async def add_paper_document(
+    knowledge_base_id: str,
+    payload: KnowledgeBaseAddPaperRequest,
+    user_id: str = Depends(get_current_user_id),
+    service: KnowledgeBaseService = Depends(get_knowledge_base_service),
+) -> KnowledgeDocumentOut:
+    return await service.add_paper_document(user_id=user_id, knowledge_base_id=knowledge_base_id, payload=payload)
+
+
 @router.delete("/{knowledge_base_id}/documents/{document_id}", response_model=MessageResponse)
 async def delete_knowledge_document(
     knowledge_base_id: str,
@@ -72,6 +95,22 @@ async def delete_knowledge_document(
 ) -> MessageResponse:
     await service.delete_document(user_id=user_id, knowledge_base_id=knowledge_base_id, document_id=document_id)
     return MessageResponse(message="Document deleted.")
+
+
+@router.patch("/{knowledge_base_id}/documents/{document_id}", response_model=KnowledgeDocumentOut)
+async def update_knowledge_document(
+    knowledge_base_id: str,
+    document_id: str,
+    payload: KnowledgeDocumentUpdateRequest,
+    user_id: str = Depends(get_current_user_id),
+    service: KnowledgeBaseService = Depends(get_knowledge_base_service),
+) -> KnowledgeDocumentOut:
+    return await service.update_document(
+        user_id=user_id,
+        knowledge_base_id=knowledge_base_id,
+        document_id=document_id,
+        payload=payload,
+    )
 
 
 @router.post("/{knowledge_base_id}/chat", response_model=KnowledgeBaseChatResponse)

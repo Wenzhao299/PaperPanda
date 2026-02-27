@@ -40,10 +40,13 @@ class CrawlerPipeline:
             return 0, []
 
         arxiv_ids = [str(record["arxiv_id"]) for record in normalized_records]
-        existing_map = {
-            paper.arxiv_id: paper
-            for paper in await self.db.scalars(select(Paper).where(Paper.arxiv_id.in_(arxiv_ids)))
-        }
+        existing_map: dict[str, Paper] = {}
+        batch_size = 5000
+        for index in range(0, len(arxiv_ids), batch_size):
+            batch_ids = arxiv_ids[index : index + batch_size]
+            rows = await self.db.scalars(select(Paper).where(Paper.arxiv_id.in_(batch_ids)))
+            for paper in rows:
+                existing_map[paper.arxiv_id] = paper
 
         touched_papers: list[Paper] = []
         for record in normalized_records:
@@ -198,13 +201,25 @@ class CrawlerPipeline:
         if not papers:
             return 0
 
-        embeddings = await self.embedding_provider.embed([paper.abstract for paper in papers])
+        embedding_targets: list[tuple[Paper, str]] = []
+        for paper in papers:
+            text = str(paper.abstract or "").strip()
+            if not text:
+                text = str(paper.title or "").strip()
+            if not text:
+                continue
+            embedding_targets.append((paper, text))
+
+        if not embedding_targets:
+            return 0
+
+        embeddings = await self.embedding_provider.embed([text for _, text in embedding_targets])
 
         try:
             client = get_milvus()
             ensure_milvus_collections(client)
             data = []
-            for paper, embedding in zip(papers, embeddings, strict=True):
+            for (paper, _), embedding in zip(embedding_targets, embeddings, strict=True):
                 published_ts = 0
                 if paper.published_date:
                     published_ts = int(datetime.combine(paper.published_date, datetime.min.time()).timestamp())
@@ -224,7 +239,7 @@ class CrawlerPipeline:
         except Exception as exc:
             raise RuntimeError(f"Failed to write abstract vectors to Milvus: {exc}") from exc
 
-        return len(papers)
+        return len(embedding_targets)
 
     def _deduplicate_records(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         merged: dict[str, dict[str, Any]] = {}
