@@ -6,6 +6,8 @@ from app.config import get_settings
 
 def build_embedding_provider():
     settings = get_settings()
+    if settings.non_chat_local_only and settings.embedding_provider in {"openai", "gemini"}:
+        return LocalEmbeddingProvider()
     if settings.embedding_provider == "openai":
         return OpenAIEmbeddingProvider()
     if settings.embedding_provider == "gemini":

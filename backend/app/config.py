@@ -116,9 +116,28 @@ class Settings(BaseSettings):
     # ---- 默认 LLM Provider ----
     default_llm_provider: str = "deepseek"
     default_chat_model: str = "deepseek-chat"
+    non_chat_local_only: bool = True
+    default_translate_provider: str = "local_qwen"
     default_translate_model: str = "deepseek-chat"
+    default_summarize_provider: str = "local_llama"
     default_summarize_model: str = "deepseek-chat"
     default_rerank_model: str = "deepseek-chat"
+    rerank_enable_llm: bool = True
+    rerank_llm_providers: str = "deepseek,qwen"
+    rerank_llm_top_k: int = 24
+    rerank_recall_top_k: int = 120
+    rerank_rrf_k: int = 60
+    rerank_semantic_weight: float = 0.7
+    rerank_keyword_weight: float = 0.3
+    local_qwen_model_path: str = ""
+    local_llama_model_path: str = ""
+    local_9g4b_model_path: str = ""
+    local_qwen_device: str = "auto"
+    local_llama_device: str = "auto"
+    local_9g4b_device: str = "auto"
+    local_llm_device: Literal["auto", "cpu", "cuda"] = "auto"
+    local_llm_max_new_tokens: int = 256
+    local_llm_temperature: float = 0.0
 
     # ---- Embedding 配置 ----
     embedding_provider: Literal["local_bge", "local_qwen", "openai", "gemini"] = "local_bge"
@@ -141,6 +160,10 @@ class Settings(BaseSettings):
     arxiv_crawl_interval_hours: int = 24
     arxiv_batch_size: int = 100
     arxiv_max_results_per_category: int = 1000
+    arxiv_incremental_overlap_days: int = 2
+    pipeline_translate_batch_size: int = 200
+    pipeline_translate_concurrency: int = 2
+    pipeline_translate_target_lang: str = "zh"
 
     @property
     def arxiv_category_list(self) -> list[str]:

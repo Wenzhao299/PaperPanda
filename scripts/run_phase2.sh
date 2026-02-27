@@ -14,7 +14,7 @@ echo "[2/4] Run database migration"
 echo "[3/4] Init Milvus collections"
 "$PY" "$ROOT_DIR/scripts/init_milvus.py"
 
-echo "[4/4] Run Phase 2 pipeline (crawl + embedding)"
+echo "[4/4] Run Phase 2 pipeline (incremental crawl + embedding + translate-untranslated)"
 "$PY" "$ROOT_DIR/scripts/run_phase2_pipeline.py"
 
 echo "Phase 2 pipeline completed."

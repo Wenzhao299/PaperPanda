@@ -10,8 +10,10 @@ class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=1000)
     source: Literal["arxiv", "conference", "journal", "all"] = "all"
     categories: list[str] = Field(default_factory=list)
+    published_year: int | None = Field(default=None, ge=1900, le=2100)
     date_from: date | None = None
     date_to: date | None = None
+    enable_translation: bool = True
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
 
@@ -29,14 +31,24 @@ class SearchResultItem(BaseModel):
     categories: list[str]
     source: str
     published_date: date | None = None
+    semantic_score: float | None = None
+    keyword_score: float | None = None
+    llm_score: float | None = None
+    rerank_score: float | None = None
+    baseline_score: float | None = None
 
 
 class SearchResponse(BaseModel):
     query: str
     total: int
+    total_pages: int
     page: int
     page_size: int
     items: list[SearchResultItem]
+    rerank_applied: bool = False
+    rerank_providers: list[str] = Field(default_factory=list)
+    rerank_reason: str | None = None
+    rerank_provider_errors: dict[str, str] = Field(default_factory=dict)
 
 
 class SearchHistoryItem(BaseModel):

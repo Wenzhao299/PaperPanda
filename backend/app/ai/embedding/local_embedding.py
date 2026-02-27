@@ -12,7 +12,7 @@ class LocalEmbeddingProvider:
         settings = get_settings()
         self.dimension = settings.embedding_dimension
         self.model_name = settings.embedding_local_model_path.strip() or settings.embedding_model_name
-        self.device = settings.embedding_device
+        self.device = self._resolve_device(settings.embedding_device)
         self._model: Any | None = None
         self._load_error: str | None = None
 
@@ -64,3 +64,27 @@ class LocalEmbeddingProvider:
         if len(vector) > self.dimension:
             return vector[: self.dimension]
         return vector + [0.0] * (self.dimension - len(vector))
+
+    @staticmethod
+    def _resolve_device(raw: str) -> str:
+        value = str(raw or "").strip().lower()
+        if value == "cpu":
+            return "cpu"
+        try:
+            import torch
+        except Exception:
+            return "cpu"
+
+        if value in {"", "auto", "cuda"}:
+            return "cuda" if torch.cuda.is_available() else "cpu"
+        if value.startswith("cuda:"):
+            if not torch.cuda.is_available():
+                return "cpu"
+            try:
+                index = int(value.split(":", 1)[1])
+            except (TypeError, ValueError):
+                return "cuda"
+            if index < 0 or index >= torch.cuda.device_count():
+                return "cuda"
+            return f"cuda:{index}"
+        return value
