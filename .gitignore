@@ -48,12 +48,6 @@ htmlcov/
 logs/
 .run/
 
-# Data & Storage
-data/
-*.pdf
-!arxiv_insight.pdf
-plans/
-
 # Celery
 celerybeat-schedule
 celerybeat.pid
@@ -70,4 +64,11 @@ models_cache/
 
 # Resources
 resources/
+docs/
 plans/
+data/
+*.pdf
+!arxiv_insight.pdf
+findings.md
+progress.md
+task_plan.md
